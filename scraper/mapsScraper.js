@@ -269,6 +269,7 @@ export async function runMapsScrape({
   location = "",
   limit = 50,
   extractEmails = true,
+  excludeUrls = [],
   proxyForEmail,
   onProgress,
 }) {
@@ -294,6 +295,12 @@ export async function runMapsScrape({
   );
 
   const raw = [];
+  const excludeUrlSet = new Set(
+    (Array.isArray(excludeUrls) ? excludeUrls : [])
+      .filter((u) => typeof u === "string")
+      .map((u) => u.trim())
+      .filter(Boolean)
+  );
   const seenPhones = new Set();
   const seenNames = new Set();
 
@@ -347,6 +354,7 @@ export async function runMapsScrape({
       if (raw.length >= limit) break;
 
       const url = placeUrls[i];
+      if (excludeUrlSet.has(url)) continue;
       onProgress?.({
         progress: Math.round((raw.length / Math.max(total, 1)) * 100),
         total: limit,
@@ -373,6 +381,9 @@ export async function runMapsScrape({
 
       row.searchQuery = fullQuery;
       row.mapsUrl = row.mapsUrl || url;
+      if (row.mapsUrl && excludeUrlSet.has(row.mapsUrl)) {
+        continue;
+      }
       row.status = classifyLead(row);
       const { priority, tags } = scoreLead(row);
       row.priority = priority;

@@ -5,7 +5,9 @@
   "use strict";
 
   const HISTORY_KEY = "leadAtlas.searchHistory";
+  const SEEN_KEY = "leadAtlas.seenMapsUrlsByQuery";
   const MAX_HISTORY = 50;
+  const MAX_SEEN_PER_QUERY = 800;
 
   const state = {
     leads: [],
@@ -317,6 +319,50 @@
     }
   }
 
+  function makeQueryKey(query, location) {
+    return `${String(query || "").trim().toLowerCase()}||${String(location || "")
+      .trim()
+      .toLowerCase()}`;
+  }
+
+  function readSeenMap() {
+    try {
+      const raw = localStorage.getItem(SEEN_KEY);
+      const obj = raw ? JSON.parse(raw) : {};
+      return obj && typeof obj === "object" ? obj : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function writeSeenMap(obj) {
+    try {
+      localStorage.setItem(SEEN_KEY, JSON.stringify(obj || {}));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function getExcludeUrlsFor(query, location) {
+    const key = makeQueryKey(query, location);
+    const map = readSeenMap();
+    const arr = map[key];
+    return Array.isArray(arr) ? arr.slice(0, MAX_SEEN_PER_QUERY) : [];
+  }
+
+  function recordSeenUrls(query, location, leads) {
+    const key = makeQueryKey(query, location);
+    const map = readSeenMap();
+    const prev = Array.isArray(map[key]) ? map[key] : [];
+    const set = new Set(prev);
+    (Array.isArray(leads) ? leads : []).forEach((l) => {
+      const u = l && typeof l.mapsUrl === "string" ? l.mapsUrl.trim() : "";
+      if (u) set.add(u);
+    });
+    map[key] = [...set].slice(0, MAX_SEEN_PER_QUERY);
+    writeSeenMap(map);
+  }
+
   function writeHistory(items) {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY)));
   }
@@ -408,6 +454,7 @@
         setProgress(100, "Done.");
         state.leads = j.results || [];
         renderTable();
+        recordSeenUrls(els.keyword.value.trim(), els.location.value.trim(), state.leads);
         stopPoll();
         state.busy = false;
         els.btnStart.disabled = false;
@@ -448,6 +495,8 @@
   async function onStart() {
     const query = (els.keyword.value || "").trim();
     if (!query || state.busy) return;
+    const location = (els.location.value || "").trim();
+    const excludeUrls = getExcludeUrlsFor(query, location);
 
     state.busy = true;
     els.btnStart.disabled = true;
@@ -467,9 +516,10 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query,
-          location: (els.location.value || "").trim(),
+          location,
           limit: Number(els.limit.value) || 50,
           extractEmails: els.extractEmails.checked,
+          excludeUrls,
         }),
       });
       const data = await res.json().catch(() => ({}));

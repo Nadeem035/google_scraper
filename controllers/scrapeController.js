@@ -3,10 +3,18 @@ import { executeScrapeJob } from "../services/scrapeService.js";
 
 export async function postScrape(req, res, next) {
   try {
-    const { query, location, limit, extractEmails } = req.body || {};
+    const { query, location, limit, extractEmails, excludeUrls } = req.body || {};
     if (!query || typeof query !== "string" || !query.trim()) {
       return res.status(400).json({ error: "query is required" });
     }
+    const safeExclude =
+      Array.isArray(excludeUrls) && excludeUrls.length
+        ? excludeUrls
+            .filter((u) => typeof u === "string")
+            .map((u) => u.trim())
+            .filter(Boolean)
+            .slice(0, 800)
+        : [];
 
     const searchQuery = [query.trim(), (location || "").trim()]
       .filter(Boolean)
@@ -27,6 +35,7 @@ export async function postScrape(req, res, next) {
       location: (location || "").trim(),
       limit: Number(limit) || 50,
       extractEmails,
+      excludeUrls: safeExclude,
     }).catch(() => {
       /* errors recorded in job */
     });
