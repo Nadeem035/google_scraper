@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <%- include('partials/head') %>
+  </head>
+  <body class="page">
+    <header class="site-header">
+      <div class="site-header__inner">
+        <div class="site-header__brand">
+          <div class="site-header__logo" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6l-8-4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <p class="site-header__name">Lead Atlas</p>
+            <p class="site-header__tag">Maps intelligence</p>
+          </div>
+        </div>
+        <nav class="site-header__nav" aria-label="Page sections">
+          <a class="site-header__link" href="#search-panel">New search</a>
+          <a class="site-header__link" href="#results-panel">Results</a>
+        </nav>
+        <p class="site-header__hint">Use responsibly — respect site terms and applicable laws.</p>
+      </div>
+    </header>
+
+    <main class="main main--full">
+      <header class="hero">
+        <p class="hero__eyebrow">Google Business lead scraper</p>
+        <h1 class="hero__headline">Find and export <span class="hero__accent">qualified leads</span> in minutes</h1>
+        <p class="hero__sub">
+          Search Maps by keyword and location, classify contacts, dedupe automatically, optionally discover emails, and export everything to Excel. No database required — your workbook is the record.
+        </p>
+      </header>
+
+      <div class="top-panels">
+        <div class="card">
+          <section class="card card--elevated" id="search-panel">
+            <div class="card__header">
+              <h2 class="card__title">Search</h2>
+              <p class="card__desc">Keyword is required. Location narrows the Maps query.</p>
+            </div>
+            <div class="card__body form-grid">
+              <label class="field field--full">
+                <span class="field__label">Keyword</span>
+                <input type="text" id="keyword" class="input" placeholder="e.g. real estate agents" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span class="field__label">Location <span class="optional">(optional)</span></span>
+                <input type="text" id="location" class="input" placeholder="e.g. Dubai" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span class="field__label">Max results</span>
+                <input type="number" id="limit" class="input" min="1" max="120" value="50" />
+              </label>
+              <div class="toggles field--full">
+                <label class="check">
+                  <input type="checkbox" id="appendExport" />
+                  <span>Append next Excel export to the last downloaded file</span>
+                </label>
+                <label class="check">
+                  <input type="checkbox" id="extractEmails" checked />
+                  <span>Extract emails from websites <span class="optional">(slower)</span></span>
+                </label>
+              </div>
+              <div class="field--full actions-row">
+                <button type="button" id="btnStart" class="btn btn--primary">
+                  <span class="btn__spinner" id="btnStartSpinner" hidden aria-hidden="true"></span>
+                  Start scraping
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div>
+          <section class="card" style="margin-bottom: 10px;">
+            <div class="card__header">
+              <h2 class="card__title">Progress</h2>
+              <p class="card__desc">Live job status while Maps is scraped.</p>
+            </div>
+            <div class="card__body">
+              <div class="progress-head">
+                <span class="muted">Status</span>
+                <span class="status-pill" id="jobStatus">idle</span>
+              </div>
+              <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">
+                <div class="progress-fill" id="progressFill" style="width:0%"></div>
+              </div>
+              <p class="progress-detail" id="progressDetail">Ready when you are.</p>
+              <p class="error-text" id="jobError" hidden></p>
+            </div>
+          </section>
+  
+          <section class="card">
+            <div class="card__header">
+              <h2 class="card__title">Recent searches</h2>
+              <p class="card__desc">Saved in this browser only. Export to Excel for a permanent copy.</p>
+            </div>
+            <div class="card__body">
+              <ul class="history-list" id="historyList"></ul>
+              <p class="muted small" id="historyEmpty">No searches yet. After a successful scrape, your query appears here.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div class="layout-stack">
+
+        <section class="card card--elevated card--results" id="results-panel">
+          <div class="card__header card__header--split">
+            <div>
+              <h2 class="card__title">Results</h2>
+              <p class="card__desc" id="resultsMeta">No rows yet. Run a search to populate the table.</p>
+            </div>
+            <div class="results-toolbar">
+              <div class="search-field search-field--wide">
+                <svg class="search-field__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input type="search" id="tableFilter" class="input input--compact" placeholder="Search in table…" />
+              </div>
+              <button type="button" id="btnExport" class="btn btn--secondary" disabled>Export Excel</button>
+            </div>
+          </div>
+          <div class="filter-panel" aria-label="Column filters">
+            <p class="filter-panel__title">Show contacts</p>
+            <div class="filter-panel__grid">
+              <label class="filter-field">
+                <span class="filter-field__label">Priority</span>
+                <select id="filterPriority" class="select">
+                  <option value="">All priorities</option>
+                  <option value="high">High priority</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span class="filter-field__label">Lead status</span>
+                <select id="filterStatus" class="select">
+                  <option value="">All statuses</option>
+                  <option value="High Value">High Value</option>
+                  <option value="Call Lead">Call Lead</option>
+                  <option value="Website Lead">Website Lead</option>
+                  <option value="Low Quality">Low Quality</option>
+                </select>
+              </label>
+              <label class="filter-field">
+                <span class="filter-field__label">Contact details</span>
+                <select id="filterContact" class="select">
+                  <option value="">Any contact</option>
+                  <option value="has_phone">Has phone</option>
+                  <option value="has_email">Has email</option>
+                  <option value="has_website">Has website</option>
+                  <option value="no_website">No website (opportunity)</option>
+                  <option value="phone_and_web">Phone + website</option>
+                </select>
+              </label>
+              <div class="filter-field filter-field--action">
+                <span class="filter-field__label filter-field__label--ghost">&nbsp;</span>
+                <button type="button" id="btnClearFilters" class="btn btn--outline">Clear filters</button>
+              </div>
+            </div>
+          </div>
+          <div class="card__body card__body--flush card__body--table">
+            <div class="sort-bar" id="sortBar" aria-label="Sort by">
+              <button type="button" class="chip" data-sort="name">Name</button>
+              <button type="button" class="chip" data-sort="rating">Rating</button>
+              <button type="button" class="chip" data-sort="reviews">Reviews</button>
+              <button type="button" class="chip" data-sort="status">Status</button>
+            </div>
+            <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+            <div class="table-scroll" role="region" aria-label="Results table — scroll horizontally for all columns">
+              <div class="table-wrap">
+                <table class="data-table" id="dataTable">
+                  <thead>
+                    <tr>
+                      <th class="col-name">Business</th>
+                      <th class="col-contact">Phone / email</th>
+                      <th class="col-web">Website</th>
+                      <th class="col-address">Address</th>
+                      <th class="col-num">Rating</th>
+                      <th class="col-num">Reviews</th>
+                      <th class="col-status">Status</th>
+                      <th class="col-maps">Maps</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tableBody"></tbody>
+                </table>
+                <p class="empty-state" id="emptyState">No results to show.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      window.__APP__ = { lastExportFile: null };
+    </script>
+    <script src="/js/dashboard.js" defer></script>
+  </body>
+</html>
