@@ -1029,6 +1029,10 @@ body.page {
   -webkit-backdrop-filter: blur(4px);
 }
 
+.fullscreen-loader[hidden] {
+  display: none !important;
+}
+
 .fullscreen-loader__card {
   width: min(560px, 100%);
   display: flex;
