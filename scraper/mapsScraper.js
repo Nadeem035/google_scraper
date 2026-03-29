@@ -9,6 +9,51 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Prefer bundled Chromium from Puppeteer (works on Linux/VPS).
+ * System Chrome via `channel: 'chrome'` only on Windows/macOS dev when no bundle exists.
+ * Set PUPPETEER_EXECUTABLE_PATH for a custom Chrome/Chromium path on the server.
+ */
+function buildPuppeteerLaunchOptions(proxyServer) {
+  const args = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--window-size=1400,900",
+  ];
+  if (proxyServer) {
+    args.push(`--proxy-server=${proxyServer}`);
+  }
+
+  const opts = {
+    headless: true,
+    args,
+  };
+
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    opts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    return opts;
+  }
+
+  try {
+    const bundled = puppeteer.executablePath();
+    if (bundled && typeof bundled === "string") {
+      opts.executablePath = bundled;
+      return opts;
+    }
+  } catch {
+    /* bundled browser not installed */
+  }
+
+  if (process.platform === "win32" || process.platform === "darwin") {
+    opts.channel = "chrome";
+    return opts;
+  }
+
+  return opts;
+}
+
 function randomBetween(a, b) {
   return a + Math.floor(Math.random() * (b - a + 1));
 }
@@ -197,24 +242,7 @@ export async function runMapsScrape({
   const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(fullQuery)}`;
 
   const proxy = getNextProxyServer();
-  const launchOpts = {
-    headless: "new",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--window-size=1400,900",
-    ],
-  };
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-    launchOpts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-  } else {
-    launchOpts.channel = "chrome";
-  }
-  if (proxy) {
-    launchOpts.args.push(`--proxy-server=${proxy}`);
-  }
-
+  const launchOpts = buildPuppeteerLaunchOptions(proxy);
   const browser = await puppeteer.launch(launchOpts);
   const page = await browser.newPage();
   await page.setViewport({ width: 1366, height: 900 });
