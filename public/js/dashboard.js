@@ -281,8 +281,12 @@
   function setFullScreenLoader(show, text) {
     if (!els.fullscreenLoader) return;
     els.fullscreenLoader.hidden = !show;
-    if (els.fullscreenLoaderText && text) {
-      els.fullscreenLoaderText.textContent = text;
+    if (els.fullscreenLoaderText) {
+      if (text != null) {
+        els.fullscreenLoaderText.textContent = String(text);
+      } else if (show) {
+        els.fullscreenLoaderText.textContent = "Working…";
+      }
     }
     document.documentElement.style.overflow = show ? "hidden" : "";
     document.body.style.overflow = show ? "hidden" : "";
