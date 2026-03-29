@@ -1,3 +1,4 @@
+import fs from "fs";
 import puppeteer from "puppeteer";
 import { getNextProxyServer } from "../utils/proxyManager.js";
 import { classifyLead } from "../utils/classifyLead.js";
@@ -10,9 +11,51 @@ function sleep(ms) {
 }
 
 /**
- * Prefer bundled Chromium from Puppeteer (works on Linux/VPS).
- * System Chrome via `channel: 'chrome'` only on Windows/macOS dev when no bundle exists.
- * Set PUPPETEER_EXECUTABLE_PATH for a custom Chrome/Chromium path on the server.
+ * Only use a browser path if the file exists. Puppeteer's executablePath() can point
+ * at a cache location where `npx puppeteer browsers install` never ran or was wiped on deploy.
+ */
+function fileExists(p) {
+  if (!p || typeof p !== "string") return false;
+  try {
+    return fs.existsSync(p) && fs.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** First usable Chrome/Chromium binary, or null. */
+function resolveChromeExecutable() {
+  const candidates = [];
+
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    candidates.push(process.env.PUPPETEER_EXECUTABLE_PATH.trim());
+  }
+
+  try {
+    const fromPkg = puppeteer.executablePath();
+    if (fromPkg) candidates.push(fromPkg);
+  } catch {
+    /* no bundled revision registered */
+  }
+
+  if (process.platform === "linux") {
+    candidates.push(
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/google-chrome",
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser"
+    );
+  }
+
+  for (const p of candidates) {
+    if (fileExists(p)) return p;
+  }
+  return null;
+}
+
+/**
+ * Prefer real binary on disk; Windows/macOS can fall back to system Chrome channel.
+ * Set PUPPETEER_EXECUTABLE_PATH on the server if Chromium lives elsewhere.
  */
 function buildPuppeteerLaunchOptions(proxyServer) {
   const args = [
@@ -31,19 +74,10 @@ function buildPuppeteerLaunchOptions(proxyServer) {
     args,
   };
 
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-    opts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  const resolved = resolveChromeExecutable();
+  if (resolved) {
+    opts.executablePath = resolved;
     return opts;
-  }
-
-  try {
-    const bundled = puppeteer.executablePath();
-    if (bundled && typeof bundled === "string") {
-      opts.executablePath = bundled;
-      return opts;
-    }
-  } catch {
-    /* bundled browser not installed */
   }
 
   if (process.platform === "win32" || process.platform === "darwin") {
@@ -243,6 +277,15 @@ export async function runMapsScrape({
 
   const proxy = getNextProxyServer();
   const launchOpts = buildPuppeteerLaunchOptions(proxy);
+  if (
+    process.platform === "linux" &&
+    !launchOpts.executablePath &&
+    !launchOpts.channel
+  ) {
+    throw new Error(
+      "Chrome/Chromium not found on the server. From your app directory run: npm run install:browsers (or npm install with lifecycle scripts enabled). On a VPS you can install Google Chrome and set PUPPETEER_EXECUTABLE_PATH to its binary path."
+    );
+  }
   const browser = await puppeteer.launch(launchOpts);
   const page = await browser.newPage();
   await page.setViewport({ width: 1366, height: 900 });
