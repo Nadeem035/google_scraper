@@ -10,6 +10,7 @@ export function createJob(meta = {}) {
     status: "queued",
     progress: 0,
     total: 0,
+    found: 0,
     currentName: null,
     results: [],
     error: null,

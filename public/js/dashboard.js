@@ -45,6 +45,11 @@
     historyList: $("historyList"),
     historyEmpty: $("historyEmpty"),
     sortBar: $("sortBar"),
+    progressFound: $("progressFound"),
+    progressTotal: $("progressTotal"),
+    progressPct: $("progressPct"),
+    fullscreenLoader: $("fullscreenLoader"),
+    fullscreenLoaderText: $("fullscreenLoaderText"),
   };
 
   function escapeHtml(s) {
@@ -265,6 +270,22 @@
     els.progressFill.style.width = `${v}%`;
     els.progressTrack.setAttribute("aria-valuenow", String(Math.round(v)));
     if (detail != null) els.progressDetail.textContent = detail;
+    if (els.progressPct) els.progressPct.textContent = `${Math.round(v)}%`;
+  }
+
+  function setProgressMeta(found, total) {
+    if (els.progressFound) els.progressFound.textContent = String(found ?? 0);
+    if (els.progressTotal) els.progressTotal.textContent = String(total ?? 0);
+  }
+
+  function setFullScreenLoader(show, text) {
+    if (!els.fullscreenLoader) return;
+    els.fullscreenLoader.hidden = !show;
+    if (els.fullscreenLoaderText && text) {
+      els.fullscreenLoaderText.textContent = text;
+    }
+    document.documentElement.style.overflow = show ? "hidden" : "";
+    document.body.style.overflow = show ? "hidden" : "";
   }
 
   function setStatusPill(text, variant) {
@@ -368,7 +389,13 @@
       if (!res.ok) throw new Error("Job not found");
       const j = await res.json();
 
+      setProgressMeta(j.found ?? (j.results ? j.results.length : 0), j.total ?? 0);
       setProgress(j.progress || 0, j.currentName ? `Current: ${j.currentName}` : "Working…");
+      if (j.status === "queued" || j.status === "running") {
+        const found = j.found ?? 0;
+        const total = j.total ?? 0;
+        setFullScreenLoader(true, `${found}/${total} collected${j.currentName ? ` · ${String(j.currentName)}` : ""}`);
+      }
 
       if (j.status === "queued" || j.status === "running") {
         setStatusPill(j.status, "run");
@@ -381,6 +408,7 @@
         state.busy = false;
         els.btnStart.disabled = false;
         els.btnStartSpinner.hidden = true;
+        setFullScreenLoader(false);
         pushHistoryEntry({
           query: els.keyword.value.trim(),
           location: els.location.value.trim(),
@@ -395,6 +423,7 @@
         state.busy = false;
         els.btnStart.disabled = false;
         els.btnStartSpinner.hidden = true;
+        setFullScreenLoader(false);
       }
     } catch {
       setStatusPill("error", "err");
@@ -402,6 +431,7 @@
       state.busy = false;
       els.btnStart.disabled = false;
       els.btnStartSpinner.hidden = true;
+      setFullScreenLoader(false);
     }
   }
 
@@ -424,6 +454,8 @@
     renderTable();
     setStatusPill("starting", "run");
     setProgress(0, "Submitting job…");
+    setProgressMeta(0, Number(els.limit.value) || 50);
+    setFullScreenLoader(true, "Submitting job…");
 
     try {
       const res = await fetch("/api/scrape", {
@@ -450,6 +482,7 @@
       state.busy = false;
       els.btnStart.disabled = false;
       els.btnStartSpinner.hidden = true;
+      setFullScreenLoader(false);
     }
   }
 

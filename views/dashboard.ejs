@@ -88,6 +88,11 @@
               <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressTrack">
                 <div class="progress-fill" id="progressFill" style="width:0%"></div>
               </div>
+              <div class="progress-meta" aria-label="Job progress details">
+                <span class="progress-meta__item"><span class="muted">Found</span> <strong id="progressFound">0</strong></span>
+                <span class="progress-meta__item"><span class="muted">Target</span> <strong id="progressTotal">0</strong></span>
+                <span class="progress-meta__item"><span class="muted">Progress</span> <strong id="progressPct">0%</strong></span>
+              </div>
               <p class="progress-detail" id="progressDetail">Ready when you are.</p>
               <p class="error-text" id="jobError" hidden></p>
             </div>
@@ -198,5 +203,15 @@
       window.__APP__ = { lastExportFile: null };
     </script>
     <script src="/js/dashboard.js" defer></script>
+
+    <div class="fullscreen-loader" id="fullscreenLoader" hidden>
+      <div class="fullscreen-loader__card" role="status" aria-live="polite" aria-label="Scraping in progress">
+        <div class="fullscreen-loader__spinner" aria-hidden="true"></div>
+        <div>
+          <p class="fullscreen-loader__title">Scraping in progress</p>
+          <p class="fullscreen-loader__detail" id="fullscreenLoaderText">Starting…</p>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

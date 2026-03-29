@@ -7,15 +7,15 @@ import { updateJob, setJobResults } from "./jobStore.js";
 export async function executeScrapeJob(jobId, params) {
   const { query, location, limit, extractEmails } = params;
   try {
-    updateJob(jobId, { status: "running", total: limit, progress: 0 });
+    updateJob(jobId, { status: "running", total: limit, progress: 0, found: 0 });
 
     const results = await runMapsScrape({
       query,
       location,
       limit: Math.min(Math.max(Number(limit) || 50, 1), 120),
       extractEmails: extractEmails !== false,
-      onProgress: ({ progress, total, currentName }) => {
-        updateJob(jobId, { progress, total, currentName });
+      onProgress: ({ progress, total, found, currentName }) => {
+        updateJob(jobId, { progress, total, found, currentName });
       },
     });
 

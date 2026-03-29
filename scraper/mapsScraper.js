@@ -118,7 +118,7 @@ async function scrollFeed(page, rounds = 8) {
 /**
  * Collect unique /maps/place/ URLs from the current results view.
  */
-async function collectPlaceLinks(page, limit) {
+async function collectPlaceLinks(page, maxLinks) {
   const hrefs = await page.evaluate((max) => {
     const set = new Set();
     document.querySelectorAll('a[href*="/maps/place/"]').forEach((a) => {
@@ -131,8 +131,8 @@ async function collectPlaceLinks(page, limit) {
       }
     });
     return [...set].slice(0, max);
-  }, limit + 5);
-  return hrefs.slice(0, limit);
+  }, maxLinks);
+  return hrefs;
 }
 
 /**
@@ -262,7 +262,7 @@ async function scrapePlaceWithRetry(page, url, retries = 1) {
 /**
  * Run Google Maps scrape: keyword + optional location, up to limit results.
  * @param {object} opts
- * @param {(p: { progress: number, total: number, currentName: string|null }) => void} [opts.onProgress]
+ * @param {(p: { progress: number, total: number, found: number, currentName: string|null }) => void} [opts.onProgress]
  */
 export async function runMapsScrape({
   query,
@@ -294,24 +294,63 @@ export async function runMapsScrape({
   );
 
   const raw = [];
+  const seenPhones = new Set();
+  const seenNames = new Set();
+
+  const normalizePhone = (p) => (p ? String(p).replace(/\D/g, "") : "");
+  const normalizeName = (n) =>
+    n ? String(n).toLowerCase().replace(/\s+/g, " ").trim() : "";
+
+  const addUniqueLead = (row) => {
+    const ph = normalizePhone(row.phone);
+    const nm = normalizeName(row.name);
+    if (ph && seenPhones.has(ph)) return false;
+    if (!ph && nm && seenNames.has(nm)) return false;
+    if (ph) seenPhones.add(ph);
+    if (nm) seenNames.add(nm);
+    raw.push(row);
+    return true;
+  };
 
   try {
     await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 90000 });
     await humanDelay();
-    await scrollFeed(page, Math.min(12, 4 + Math.ceil(limit / 15)));
+    await scrollFeed(page, 4);
 
-    let placeUrls = await collectPlaceLinks(page, limit);
-    if (placeUrls.length === 0) {
-      await scrollFeed(page, 10);
-      placeUrls = await collectPlaceLinks(page, limit);
+    // Keep scrolling / collecting until we have enough URLs, or no more are loading.
+    const urlSet = new Set();
+    let stableRounds = 0;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const found = await collectPlaceLinks(page, Math.max(120, limit * 6));
+      for (const u of found) urlSet.add(u);
+
+      // If we have plenty of URLs, stop scrolling early.
+      if (urlSet.size >= limit * 3) break;
+
+      const before = urlSet.size;
+      await scrollFeed(page, 3);
+      const foundAfter = await collectPlaceLinks(page, Math.max(120, limit * 6));
+      for (const u of foundAfter) urlSet.add(u);
+
+      if (urlSet.size === before) stableRounds += 1;
+      else stableRounds = 0;
+
+      // Two stable rounds usually means Maps isn't loading more results.
+      if (stableRounds >= 2) break;
     }
 
-    const total = Math.min(placeUrls.length, limit);
-    for (let i = 0; i < total; i += 1) {
+    const placeUrls = [...urlSet];
+    const total = Math.max(1, limit);
+    let processed = 0;
+
+    for (let i = 0; i < placeUrls.length; i += 1) {
+      if (raw.length >= limit) break;
+
       const url = placeUrls[i];
       onProgress?.({
-        progress: Math.round((i / Math.max(total, 1)) * 100),
-        total,
+        progress: Math.round((raw.length / Math.max(total, 1)) * 100),
+        total: limit,
+        found: raw.length,
         currentName: url,
       });
 
@@ -322,9 +361,11 @@ export async function runMapsScrape({
         row = null;
       }
       if (!row) {
+        processed += 1;
         onProgress?.({
-          progress: Math.round(((i + 1) / Math.max(total, 1)) * 100),
-          total,
+          progress: Math.round((raw.length / Math.max(total, 1)) * 100),
+          total: limit,
+          found: raw.length,
           currentName: null,
         });
         continue;
@@ -345,10 +386,12 @@ export async function runMapsScrape({
         row.email = emails[0] || "";
       }
 
-      raw.push(row);
+      addUniqueLead(row);
+      processed += 1;
       onProgress?.({
-        progress: Math.round(((i + 1) / Math.max(total, 1)) * 100),
-        total,
+        progress: Math.round((raw.length / Math.max(total, 1)) * 100),
+        total: limit,
+        found: raw.length,
         currentName: row.name || null,
       });
 
@@ -358,6 +401,7 @@ export async function runMapsScrape({
     await browser.close();
   }
 
+  // Raw is already unique (phone or name), but keep one final pass just in case.
   const deduped = dedupeLeads(raw);
-  return deduped;
+  return deduped.slice(0, limit);
 }
