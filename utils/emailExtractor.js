@@ -1,4 +1,5 @@
 import axios from "axios";
+import { extractContactsFromUrl } from "./contactExtractor.js";
 
 const EMAIL_RE =
   /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -58,3 +59,6 @@ export async function extractEmailsFromUrl(url, { timeoutMs = 12000, proxyUrl } 
     return [];
   }
 }
+
+// Back-compat helper: prefer using extractContactsFromUrl for socials + emails.
+export { extractContactsFromUrl };

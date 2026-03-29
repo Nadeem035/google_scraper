@@ -4,7 +4,7 @@ import { getNextProxyServer } from "../utils/proxyManager.js";
 import { classifyLead } from "../utils/classifyLead.js";
 import { dedupeLeads } from "../utils/dedupeLeads.js";
 import { scoreLead } from "../utils/leadScore.js";
-import { extractEmailsFromUrl } from "../utils/emailExtractor.js";
+import { extractContactsFromUrl } from "../utils/contactExtractor.js";
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -389,12 +389,21 @@ export async function runMapsScrape({
       row.priority = priority;
       row.tags = tags;
       row.email = "";
+      row.socials = {
+        facebook: "",
+        instagram: "",
+        linkedin: "",
+        twitter: "",
+        youtube: "",
+        tiktok: "",
+      };
 
       if (extractEmails && row.website) {
-        const emails = await extractEmailsFromUrl(row.website, {
+        const { emails, socials } = await extractContactsFromUrl(row.website, {
           proxyUrl: proxyForEmail,
         });
         row.email = emails[0] || "";
+        row.socials = { ...row.socials, ...(socials || {}) };
       }
 
       addUniqueLead(row);
