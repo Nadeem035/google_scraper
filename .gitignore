@@ -23,3 +23,7 @@ dist/
 
 # App-generated exports (optional — remove if you want to track samples)
 backend/exports/*.xlsx
+
+
+exports/
+zOthers/
