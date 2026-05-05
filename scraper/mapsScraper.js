@@ -335,10 +335,10 @@ export async function runMapsScrape({
     const urlSet = new Set();
     let stableRounds = 0;
     const maxCollectLinks = Math.max(180, limit * 10);
-    const maxAttempts = completenessMode === "max" ? 18 : 10;
-    const stableRoundLimit = completenessMode === "max" ? 4 : 2;
+    const maxAttempts = completenessMode === "max" ? Math.max(18, Math.ceil(limit / 12)) : 10;
+    const stableRoundLimit = completenessMode === "max" ? 6 : 2;
     const targetUrlPool =
-      completenessMode === "max" ? Math.max(320, limit * 10) : Math.max(120, limit * 3);
+      completenessMode === "max" ? Math.max(400, limit * 12) : Math.max(120, limit * 3);
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const found = await collectPlaceLinks(page, maxCollectLinks);

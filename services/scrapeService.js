@@ -7,6 +7,10 @@ import { updateJob, setJobResults } from "./jobStore.js";
 export async function executeScrapeJob(jobId, params) {
   const { query, location, limit, extractEmails, excludeUrls } = params;
   try {
+    const locationText = String(location || "").trim();
+    const fullSearchQuery = [String(query || "").trim(), locationText]
+      .filter(Boolean)
+      .join(" ");
     const requestedLimit = Math.max(Number(limit) || 50, 1);
     const safeLimit = Math.min(requestedLimit, 500);
     const safeExcludeUrls = Array.isArray(excludeUrls) ? excludeUrls : [];
@@ -14,7 +18,7 @@ export async function executeScrapeJob(jobId, params) {
 
     const firstPass = await runMapsScrape({
       query,
-      location,
+      location: locationText,
       limit: safeLimit,
       extractEmails: extractEmails !== false,
       excludeUrls: safeExcludeUrls,
@@ -30,7 +34,17 @@ export async function executeScrapeJob(jobId, params) {
       ...(firstPass.stats || {}),
       requested: safeLimit,
       returnedCount: finalResults.length,
+      mapsExhausted: finalResults.length < safeLimit,
     };
+
+    const seenKeys = new Set(
+      finalResults.map((row) => {
+        const name = String(row?.name || "").toLowerCase().trim();
+        const phone = String(row?.phone || "").replace(/\D/g, "");
+        const maps = String(row?.mapsUrl || "").trim();
+        return maps || `${name}|${phone}`;
+      })
+    );
 
     // If exclusions make the first pass too short, run a refill pass without exclusions.
     if (finalResults.length < safeLimit && safeExcludeUrls.length > 0) {
@@ -77,6 +91,66 @@ export async function executeScrapeJob(jobId, params) {
         refillFromSeenCount: Math.max(0, totalAfterRefill - (firstPass.results?.length || 0)),
         firstPassReturnedCount: firstPass.results?.length || 0,
       };
+
+      for (const row of finalResults) {
+        const name = String(row?.name || "").toLowerCase().trim();
+        const phone = String(row?.phone || "").replace(/\D/g, "");
+        const maps = String(row?.mapsUrl || "").trim();
+        seenKeys.add(maps || `${name}|${phone}`);
+      }
+    }
+
+    // If location-scoped results are still short, widen to query-only mode.
+    if (finalResults.length < safeLimit && locationText) {
+      updateJob(jobId, {
+        status: "running",
+        currentName: "Widening search scope (query without location)",
+      });
+
+      const widenedPass = await runMapsScrape({
+        query,
+        location: "",
+        limit: safeLimit,
+        extractEmails: extractEmails !== false,
+        excludeUrls: [],
+        allowDuplicateBackfill: true,
+        completenessMode: "max",
+        onProgress: ({ currentName }) => {
+          const found = Math.min(safeLimit, finalResults.length);
+          updateJob(jobId, {
+            progress: Math.round((found / Math.max(safeLimit, 1)) * 100),
+            total: safeLimit,
+            found,
+            currentName,
+          });
+        },
+      });
+
+      const beforeWiden = finalResults.length;
+      const widenedRows = Array.isArray(widenedPass.results) ? widenedPass.results : [];
+      for (const row of widenedRows) {
+        if (finalResults.length >= safeLimit) break;
+        const name = String(row?.name || "").toLowerCase().trim();
+        const phone = String(row?.phone || "").replace(/\D/g, "");
+        const maps = String(row?.mapsUrl || "").trim();
+        const key = maps || `${name}|${phone}`;
+        if (!key || seenKeys.has(key)) continue;
+        seenKeys.add(key);
+        finalResults.push({
+          ...row,
+          searchQuery: fullSearchQuery,
+          widenedScope: true,
+        });
+      }
+
+      const widenedAddedCount = Math.max(0, finalResults.length - beforeWiden);
+      finalStats = {
+        ...finalStats,
+        returnedCount: finalResults.length,
+        fulfilledExact: finalResults.length >= safeLimit,
+        mapsExhausted: finalResults.length < safeLimit,
+        widenedScopeAddedCount: widenedAddedCount,
+      };
     }
 
     setJobResults(jobId, finalResults.slice(0, safeLimit), finalStats);
@@ -99,6 +173,7 @@ export async function executeScrapeJob(jobId, params) {
       mapsExhausted: Boolean(finalStats?.mapsExhausted),
       refillFromSeenCount: finalStats?.refillFromSeenCount ?? 0,
       firstPassReturnedCount: finalStats?.firstPassReturnedCount ?? 0,
+      widenedScopeAddedCount: finalStats?.widenedScopeAddedCount ?? 0,
     });
   } catch (err) {
     updateJob(jobId, {

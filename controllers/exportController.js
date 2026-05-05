@@ -8,8 +8,31 @@ function safeBasename(name) {
   const base = path.basename(name);
   if (base.includes("..") || base.includes("/") || base.includes("\\"))
     return null;
-  if (!/^leads-[\w.-]+\.xlsx$/i.test(base)) return null;
+  if (!/^[\w.-]+\.xlsx$/i.test(base)) return null;
   return base;
+}
+
+function downloadNameFromSearchQuery(searchQuery) {
+  const safe =
+    String(searchQuery || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[\'"]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "leads";
+  return `${safe}.xlsx`;
+}
+
+function safeDownloadName(name) {
+  return safeBasename(name) || "export.xlsx";
+}
+
+function makeContentDisposition(filename) {
+  const safe = String(filename || "export.xlsx")
+    .replace(/[^\w.-]/g, "_")
+    .slice(0, 200);
+  return `attachment; filename="${safe}"`;
 }
 
 /**
@@ -47,9 +70,11 @@ export async function postExport(req, res, next) {
       searchQuery: q,
     });
 
+    const dlName = downloadNameFromSearchQuery(q);
     return res.json({
       file: filename,
-      downloadUrl: `/api/download?file=${encodeURIComponent(filename)}`,
+      downloadName: dlName,
+      downloadUrl: `/api/download?file=${encodeURIComponent(filename)}&name=${encodeURIComponent(dlName)}`,
     });
   } catch (e) {
     next(e);
@@ -62,7 +87,9 @@ export function getDownload(req, res, next) {
     if (!file) return res.status(400).json({ error: "Invalid file" });
     const abs = path.join(getExportsDir(), file);
     if (!fs.existsSync(abs)) return res.status(404).json({ error: "Not found" });
-    return res.download(abs, "leads.xlsx");
+    const suggested = safeDownloadName(req.query.name);
+    res.setHeader("Content-Disposition", makeContentDisposition(suggested));
+    return res.sendFile(abs);
   } catch (e) {
     next(e);
   }

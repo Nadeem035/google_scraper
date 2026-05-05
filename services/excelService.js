@@ -10,6 +10,24 @@ function ensureExportsDir() {
   if (!fs.existsSync(exportsDir)) fs.mkdirSync(exportsDir, { recursive: true });
 }
 
+function slugifyFilePart(value) {
+  return (
+    String(value || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[\'"]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "leads"
+  );
+}
+
+export function buildExportFilename(searchQuery) {
+  const base = slugifyFilePart(searchQuery);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `${base}-${stamp}.xlsx`;
+}
+
 /**
  * Build leads.xlsx with multiple sheets:
  * - All Data
@@ -131,7 +149,7 @@ export async function writeLeadsWorkbook(rows, { appendFromPath, searchQuery } =
     if (!ig) noInstagramSheet.addRow(rowToExcel(r, sr.noInstagram++));
   });
 
-  const filename = `leads-${Date.now()}.xlsx`;
+  const filename = buildExportFilename(searchQuery);
   const outPath = path.join(exportsDir, filename);
   await workbook.xlsx.writeFile(outPath);
   return { filename, absolutePath: outPath };

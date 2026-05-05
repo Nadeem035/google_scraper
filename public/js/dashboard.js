@@ -453,10 +453,6 @@
       if (j.status === "queued" || j.status === "running") {
         setStatusPill(j.status, "run");
       } else if (j.status === "completed") {
-        const uniqueFound = j.uniqueFound ?? returnedCount;
-        const duplicateBackfillCount =
-          j.duplicateBackfillCount ?? Math.max(0, returnedCount - uniqueFound);
-        const refillFromSeenCount = j.refillFromSeenCount ?? 0;
         const target = totalRequested || returnedCount;
         const isExact =
           typeof j.fulfilledExact === "boolean"
@@ -467,20 +463,14 @@
         if (isExact) {
           setStatusPill("completed", "ok");
         } else if (mapsExhausted) {
-          setStatusPill("maps exhausted", "ok");
+          setStatusPill("search complete", "ok");
         } else {
-          setStatusPill("completed (short)", "err");
+          setStatusPill("search complete", "ok");
         }
 
-        let detailMsg = `Done. Returned ${returnedCount}/${target}.`;
-        const notes = [];
-        if (duplicateBackfillCount > 0)
-          notes.push(`${uniqueFound} unique + ${duplicateBackfillCount} duplicate backfill`);
-        if (refillFromSeenCount > 0)
-          notes.push(`${refillFromSeenCount} from previously seen`);
-        if (mapsExhausted && !isExact)
-          notes.push("Google Maps has no more listings for this query");
-        if (notes.length) detailMsg = `Done. Returned ${returnedCount}/${target} (${notes.join("; ")}).`;
+        let detailMsg = isExact
+          ? `Found all ${returnedCount} leads.`
+          : `Found ${returnedCount} leads. Google Maps has no more results for this search.`;
         setProgress(100, detailMsg);
         state.leads = j.results || [];
         renderTable();
@@ -593,7 +583,14 @@
 
       window.__APP__ = window.__APP__ || {};
       window.__APP__.lastExportFile = data.file;
-      window.open(`/api/download?file=${encodeURIComponent(data.file)}`, "_blank", "noopener,noreferrer");
+      const dlName = data.downloadName || "export.xlsx";
+      const dlUrl = `/api/download?file=${encodeURIComponent(data.file)}&name=${encodeURIComponent(dlName)}`;
+      const link = document.createElement("a");
+      link.href = dlUrl;
+      link.download = dlName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       showToast("Download started");
     } catch (e) {
       showToast(e.message || "Export failed", true);
