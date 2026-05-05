@@ -41,6 +41,7 @@
     progressFill: $("progressFill"),
     progressTrack: $("progressTrack"),
     progressDetail: $("progressDetail"),
+    jobDiagnostics: $("jobDiagnostics"),
     jobStatus: $("jobStatus"),
     jobError: $("jobError"),
     toast: $("toast"),
@@ -81,6 +82,23 @@
         return "badge badge--low";
       default:
         return "badge";
+    }
+  }
+
+  function diagnosticLabel(code) {
+    switch (code) {
+      case "duplicate_phone":
+        return "Duplicate phone";
+      case "duplicate_name":
+        return "Duplicate name";
+      case "exclude_url_list":
+        return "Exclude list match";
+      case "scrape_failed":
+        return "Scrape failed";
+      case "missing_core_fields":
+        return "Missing core fields";
+      default:
+        return String(code || "Diagnostic");
     }
   }
 
@@ -201,6 +219,14 @@
           meta.push(
             '<span class="meta-chip meta-chip--opp" title="No website listed">Opportunity</span>'
           );
+        if (Array.isArray(row.diagnostics) && row.diagnostics.length) {
+          row.diagnostics.slice(0, 3).forEach((diag) => {
+            const label = diagnosticLabel(diag);
+            meta.push(
+              `<span class="meta-chip meta-chip--warn" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`
+            );
+          });
+        }
 
         const phone = escapeHtml(row.phone || "");
         const email = row.email
@@ -300,6 +326,51 @@
     if (variant === "run") els.jobStatus.classList.add("status-pill--run");
     if (variant === "ok") els.jobStatus.classList.add("status-pill--ok");
     if (variant === "err") els.jobStatus.classList.add("status-pill--err");
+  }
+
+  function renderDiagnostics(job) {
+    if (!els.jobDiagnostics) return;
+    const items = [];
+    const duplicateCount = Number(job?.duplicateSkippedCount || 0);
+    const excludedCount = Number(job?.excludedCount || 0);
+    const failedCount = Number(job?.failedCount || 0);
+    const missingCoreFieldsCount = Number(job?.missingCoreFieldsCount || 0);
+    const refillCount = Number(job?.refillFromSeenCount || 0);
+    const widenedCount = Number(job?.widenedScopeAddedCount || 0);
+
+    if (duplicateCount > 0) {
+      items.push(`Duplicate matches detected: ${duplicateCount}. Kept in the results instead of skipping them.`);
+    }
+    if (excludedCount > 0) {
+      items.push(`Exclude-list matches detected: ${excludedCount}. Those rows were preserved and tagged.`);
+    }
+    if (failedCount > 0) {
+      items.push(`Scrape failures detected: ${failedCount}. Failure rows are preserved with diagnostics.`);
+    }
+    if (missingCoreFieldsCount > 0) {
+      items.push(`Incomplete place pages detected: ${missingCoreFieldsCount}. Missing-field rows are preserved and tagged.`);
+    }
+    if (refillCount > 0) {
+      items.push(`Refill reuse recorded: ${refillCount}.`);
+    }
+    if (widenedCount > 0) {
+      items.push(`Widened search added: ${widenedCount}.`);
+    }
+
+    if (items.length === 0) {
+      items.push("No skip conditions were triggered. All discovered rows are being kept.");
+    }
+
+    els.jobDiagnostics.hidden = false;
+    els.jobDiagnostics.innerHTML = items
+      .map((msg) => `<div class="job-diagnostics__item">${escapeHtml(msg)}</div>`)
+      .join("");
+  }
+
+  function clearDiagnostics() {
+    if (!els.jobDiagnostics) return;
+    els.jobDiagnostics.hidden = true;
+    els.jobDiagnostics.innerHTML = "";
   }
 
   function stopPoll() {
@@ -445,6 +516,9 @@
       setProgressMeta(returnedCount, totalRequested);
       setProgress(j.progress || 0, j.currentName ? `Current: ${j.currentName}` : "Working…");
       if (j.status === "queued" || j.status === "running") {
+        clearDiagnostics();
+      }
+      if (j.status === "queued" || j.status === "running") {
         const found = returnedCount;
         const total = totalRequested;
         setFullScreenLoader(true, `${found}/${total} collected${j.currentName ? ` · ${String(j.currentName)}` : ""}`);
@@ -473,6 +547,7 @@
           : `Found ${returnedCount} leads. Google Maps has no more results for this search.`;
         setProgress(100, detailMsg);
         state.leads = j.results || [];
+        renderDiagnostics(j);
         renderTable();
         recordSeenUrls(els.keyword.value.trim(), els.location.value.trim(), state.leads);
         stopPoll();
@@ -488,6 +563,7 @@
       } else if (j.status === "failed") {
         setStatusPill("failed", "err");
         setProgress(0, "");
+        renderDiagnostics(j);
         els.jobError.hidden = false;
         els.jobError.textContent = j.error || "Scrape failed";
         stopPoll();
@@ -523,6 +599,7 @@
     els.btnStartSpinner.hidden = false;
     els.jobError.hidden = true;
     els.jobError.textContent = "";
+    clearDiagnostics();
     state.leads = [];
     renderTable();
     setStatusPill("starting", "run");

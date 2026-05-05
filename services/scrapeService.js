@@ -37,15 +37,6 @@ export async function executeScrapeJob(jobId, params) {
       mapsExhausted: finalResults.length < safeLimit,
     };
 
-    const seenKeys = new Set(
-      finalResults.map((row) => {
-        const name = String(row?.name || "").toLowerCase().trim();
-        const phone = String(row?.phone || "").replace(/\D/g, "");
-        const maps = String(row?.mapsUrl || "").trim();
-        return maps || `${name}|${phone}`;
-      })
-    );
-
     // If exclusions make the first pass too short, run a refill pass without exclusions.
     if (finalResults.length < safeLimit && safeExcludeUrls.length > 0) {
       updateJob(jobId, {
@@ -91,13 +82,6 @@ export async function executeScrapeJob(jobId, params) {
         refillFromSeenCount: Math.max(0, totalAfterRefill - (firstPass.results?.length || 0)),
         firstPassReturnedCount: firstPass.results?.length || 0,
       };
-
-      for (const row of finalResults) {
-        const name = String(row?.name || "").toLowerCase().trim();
-        const phone = String(row?.phone || "").replace(/\D/g, "");
-        const maps = String(row?.mapsUrl || "").trim();
-        seenKeys.add(maps || `${name}|${phone}`);
-      }
     }
 
     // If location-scoped results are still short, widen to query-only mode.
@@ -130,12 +114,6 @@ export async function executeScrapeJob(jobId, params) {
       const widenedRows = Array.isArray(widenedPass.results) ? widenedPass.results : [];
       for (const row of widenedRows) {
         if (finalResults.length >= safeLimit) break;
-        const name = String(row?.name || "").toLowerCase().trim();
-        const phone = String(row?.phone || "").replace(/\D/g, "");
-        const maps = String(row?.mapsUrl || "").trim();
-        const key = maps || `${name}|${phone}`;
-        if (!key || seenKeys.has(key)) continue;
-        seenKeys.add(key);
         finalResults.push({
           ...row,
           searchQuery: fullSearchQuery,
@@ -153,7 +131,7 @@ export async function executeScrapeJob(jobId, params) {
       };
     }
 
-    setJobResults(jobId, finalResults.slice(0, safeLimit), finalStats);
+    setJobResults(jobId, finalResults, finalStats);
     updateJob(jobId, {
       status: "completed",
       progress: 100,
@@ -167,6 +145,7 @@ export async function executeScrapeJob(jobId, params) {
       duplicateSkippedCount: finalStats?.duplicateSkippedCount ?? 0,
       excludedCount: finalStats?.excludedCount ?? 0,
       failedCount: finalStats?.failedCount ?? 0,
+      missingCoreFieldsCount: finalStats?.missingCoreFieldsCount ?? 0,
       processedCount: finalStats?.processedCount ?? 0,
       candidateUrlCount: finalStats?.candidateUrlCount ?? 0,
       fulfilledExact: Boolean(finalStats?.fulfilledExact),

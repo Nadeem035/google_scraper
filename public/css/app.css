@@ -873,6 +873,12 @@ body.page {
   border: 1px solid #fed7aa;
 }
 
+.meta-chip--warn {
+  background: #fff7ed;
+  color: #9a3412;
+  border-color: #fdba74;
+}
+
 .meta-chip--opp {
   cursor: default;
 }
@@ -1088,6 +1094,27 @@ body.page {
   font-size: 0.85rem;
   color: var(--text-secondary);
   min-height: 2.5em;
+}
+
+.job-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.job-diagnostics[hidden] {
+  display: none !important;
+}
+
+.job-diagnostics__item {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fffaf3;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .progress-meta {

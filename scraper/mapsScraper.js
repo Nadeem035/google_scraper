@@ -2,7 +2,6 @@ import fs from "fs";
 import puppeteer from "puppeteer";
 import { getNextProxyServer } from "../utils/proxyManager.js";
 import { classifyLead } from "../utils/classifyLead.js";
-import { dedupeLeads } from "../utils/dedupeLeads.js";
 import { scoreLead } from "../utils/leadScore.js";
 import { extractContactsFromUrl } from "../utils/contactExtractor.js";
 
@@ -244,18 +243,40 @@ async function scrapePlacePage(page) {
 }
 
 async function scrapePlaceWithRetry(page, url, retries = 1) {
+  let lastError = null;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
       await sleep(randomBetween(1500, 3000));
       const data = await scrapePlacePage(page);
-      if (data.name || data.phone || data.address) return data;
+      const hasMinimumFields = Boolean(data.name || data.phone || data.address);
+      return {
+        ...data,
+        mapsUrl: data.mapsUrl || url,
+        scrapeAttempts: attempt + 1,
+        scrapeFailed: false,
+        missingCoreFields: !hasMinimumFields,
+      };
     } catch (e) {
-      if (attempt === retries) throw e;
+      lastError = e;
+      if (attempt === retries) break;
       await sleep(randomBetween(2000, 4000));
     }
   }
-  return null;
+  return {
+    name: "",
+    category: "",
+    phone: "",
+    website: "",
+    address: "",
+    rating: "",
+    reviews: "",
+    mapsUrl: url,
+    scrapeAttempts: retries + 1,
+    scrapeFailed: true,
+    scrapeError: lastError?.message || "Scrape failed",
+    missingCoreFields: true,
+  };
 }
 
 /**
@@ -296,10 +317,10 @@ export async function runMapsScrape({
   );
 
   const uniqueLeads = [];
-  const duplicateCandidates = [];
   let excludedCount = 0;
   let failedCount = 0;
   let duplicateSkippedCount = 0;
+  let missingCoreFieldsCount = 0;
   let processedCount = 0;
   let candidateUrlCount = 0;
   const excludeUrlSet = new Set(
@@ -315,15 +336,27 @@ export async function runMapsScrape({
   const normalizeName = (n) =>
     n ? String(n).toLowerCase().replace(/\s+/g, " ").trim() : "";
 
-  const addUniqueLead = (row) => {
+  const recordLead = (row) => {
     const ph = normalizePhone(row.phone);
     const nm = normalizeName(row.name);
-    if (ph && seenPhones.has(ph)) return { accepted: false, reason: "phone" };
-    if (!ph && nm && seenNames.has(nm)) return { accepted: false, reason: "name" };
-    if (ph) seenPhones.add(ph);
-    if (nm) seenNames.add(nm);
+    const diagnostics = Array.isArray(row.diagnostics) ? [...row.diagnostics] : [];
+    let duplicateReason = "";
+
+    if (ph && seenPhones.has(ph)) duplicateReason = "duplicate_phone";
+    else if (!ph && nm && seenNames.has(nm)) duplicateReason = "duplicate_name";
+
+    if (ph && !seenPhones.has(ph)) seenPhones.add(ph);
+    if (nm && !seenNames.has(nm)) seenNames.add(nm);
+
+    if (duplicateReason) {
+      diagnostics.push(duplicateReason);
+      duplicateSkippedCount += 1;
+      row.isDuplicate = true;
+      row.duplicateReason = duplicateReason;
+    }
+
+    row.diagnostics = [...new Set(diagnostics)];
     uniqueLeads.push(row);
-    return { accepted: true, reason: null };
   };
 
   try {
@@ -364,13 +397,7 @@ export async function runMapsScrape({
     const total = Math.max(1, limit);
 
     for (let i = 0; i < placeUrls.length; i += 1) {
-      if (uniqueLeads.length >= limit) break;
-
       const url = placeUrls[i];
-      if (excludeUrlSet.has(url)) {
-        excludedCount += 1;
-        continue;
-      }
       onProgress?.({
         progress: Math.round((uniqueLeads.length / Math.max(total, 1)) * 100),
         total: limit,
@@ -382,30 +409,54 @@ export async function runMapsScrape({
       try {
         row = await scrapePlaceWithRetry(page, url, completenessMode === "max" ? 2 : 1);
       } catch {
-        row = null;
-      }
-      if (!row) {
-        failedCount += 1;
-        processedCount += 1;
-        onProgress?.({
-          progress: Math.round((uniqueLeads.length / Math.max(total, 1)) * 100),
-          total: limit,
-          found: uniqueLeads.length,
-          currentName: null,
-        });
-        continue;
+        row = {
+          name: "",
+          category: "",
+          phone: "",
+          website: "",
+          address: "",
+          rating: "",
+          reviews: "",
+          mapsUrl: url,
+          scrapeFailed: true,
+          scrapeError: "Scrape failed",
+          missingCoreFields: true,
+          diagnostics: ["scrape_failed"],
+        };
       }
 
       row.searchQuery = fullQuery;
       row.mapsUrl = row.mapsUrl || url;
       if (row.mapsUrl && excludeUrlSet.has(row.mapsUrl)) {
         excludedCount += 1;
-        continue;
+        row.isExcluded = true;
+        row.excludeReason = "exclude_url_list";
+        row.diagnostics = Array.isArray(row.diagnostics)
+          ? [...new Set([...row.diagnostics, "exclude_url_list"])]
+          : ["exclude_url_list"];
       }
-      row.status = classifyLead(row);
+      if (row.scrapeFailed) {
+        failedCount += 1;
+        row.diagnostics = Array.isArray(row.diagnostics)
+          ? [...new Set([...row.diagnostics, "scrape_failed"])]
+          : ["scrape_failed"];
+      }
+      if (row.missingCoreFields) {
+        missingCoreFieldsCount += 1;
+        row.diagnostics = Array.isArray(row.diagnostics)
+          ? [...new Set([...row.diagnostics, "missing_core_fields"])]
+          : ["missing_core_fields"];
+      }
+
+      row.status = row.scrapeFailed ? "Scrape Failed" : classifyLead(row);
       const { priority, tags } = scoreLead(row);
       row.priority = priority;
-      row.tags = tags;
+      row.tags = Array.isArray(tags) ? [...tags] : [];
+      if (row.isDuplicate) row.tags.push(row.duplicateReason || "duplicate");
+      if (row.isExcluded) row.tags.push("exclude_url_list");
+      if (row.scrapeFailed) row.tags.push("scrape_failed");
+      if (row.missingCoreFields) row.tags.push("missing_core_fields");
+      row.tags = [...new Set(row.tags)];
       row.email = "";
       row.socials = {
         facebook: "",
@@ -424,16 +475,7 @@ export async function runMapsScrape({
         row.socials = { ...row.socials, ...(socials || {}) };
       }
 
-      const insert = addUniqueLead(row);
-      if (!insert.accepted) {
-        duplicateSkippedCount += 1;
-        duplicateCandidates.push({
-          ...row,
-          isDuplicateBackfill: true,
-          duplicateReason:
-            insert.reason === "phone" ? "duplicate_phone" : "duplicate_name",
-        });
-      }
+      recordLead(row);
 
       processedCount += 1;
       onProgress?.({
@@ -449,33 +491,19 @@ export async function runMapsScrape({
     await browser.close();
   }
 
-  // Keep a final unique pass for the primary pool, then optionally backfill with duplicates.
-  const dedupedUnique = dedupeLeads(uniqueLeads);
-  const results = dedupedUnique.slice(0, limit);
-
-  let duplicateBackfillCount = 0;
-  if (allowDuplicateBackfill && results.length < limit) {
-    for (const row of duplicateCandidates) {
-      if (results.length >= limit) break;
-      results.push({
-        ...row,
-        isDuplicateBackfill: true,
-      });
-      duplicateBackfillCount += 1;
-    }
-  }
-
-  const returnedCount = Math.min(results.length, limit);
+  const results = uniqueLeads;
+  const returnedCount = results.length;
   return {
-    results: results.slice(0, limit),
+    results,
     stats: {
       requested: limit,
-      uniqueFound: dedupedUnique.length,
+      uniqueFound: uniqueLeads.length,
       returnedCount,
-      duplicateBackfillCount,
+      duplicateBackfillCount: 0,
       duplicateSkippedCount,
       excludedCount,
       failedCount,
+      missingCoreFieldsCount,
       processedCount,
       candidateUrlCount,
       fulfilledExact: returnedCount >= limit,
