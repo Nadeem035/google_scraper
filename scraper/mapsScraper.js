@@ -30,7 +30,6 @@ function resolveChromeExecutable() {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
     candidates.push(process.env.PUPPETEER_EXECUTABLE_PATH.trim());
   }
-
   try {
     const fromPkg = puppeteer.executablePath();
     if (fromPkg) candidates.push(fromPkg);
@@ -270,6 +269,8 @@ export async function runMapsScrape({
   limit = 50,
   extractEmails = true,
   excludeUrls = [],
+  allowDuplicateBackfill = true,
+  completenessMode = "max",
   proxyForEmail,
   onProgress,
 }) {
@@ -294,7 +295,13 @@ export async function runMapsScrape({
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
   );
 
-  const raw = [];
+  const uniqueLeads = [];
+  const duplicateCandidates = [];
+  let excludedCount = 0;
+  let failedCount = 0;
+  let duplicateSkippedCount = 0;
+  let processedCount = 0;
+  let candidateUrlCount = 0;
   const excludeUrlSet = new Set(
     (Array.isArray(excludeUrls) ? excludeUrls : [])
       .filter((u) => typeof u === "string")
@@ -311,12 +318,12 @@ export async function runMapsScrape({
   const addUniqueLead = (row) => {
     const ph = normalizePhone(row.phone);
     const nm = normalizeName(row.name);
-    if (ph && seenPhones.has(ph)) return false;
-    if (!ph && nm && seenNames.has(nm)) return false;
+    if (ph && seenPhones.has(ph)) return { accepted: false, reason: "phone" };
+    if (!ph && nm && seenNames.has(nm)) return { accepted: false, reason: "name" };
     if (ph) seenPhones.add(ph);
     if (nm) seenNames.add(nm);
-    raw.push(row);
-    return true;
+    uniqueLeads.push(row);
+    return { accepted: true, reason: null };
   };
 
   try {
@@ -327,53 +334,63 @@ export async function runMapsScrape({
     // Keep scrolling / collecting until we have enough URLs, or no more are loading.
     const urlSet = new Set();
     let stableRounds = 0;
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      const found = await collectPlaceLinks(page, Math.max(120, limit * 6));
+    const maxCollectLinks = Math.max(180, limit * 10);
+    const maxAttempts = completenessMode === "max" ? 18 : 10;
+    const stableRoundLimit = completenessMode === "max" ? 4 : 2;
+    const targetUrlPool =
+      completenessMode === "max" ? Math.max(320, limit * 10) : Math.max(120, limit * 3);
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const found = await collectPlaceLinks(page, maxCollectLinks);
       for (const u of found) urlSet.add(u);
 
       // If we have plenty of URLs, stop scrolling early.
-      if (urlSet.size >= limit * 3) break;
+      if (urlSet.size >= targetUrlPool) break;
 
       const before = urlSet.size;
-      await scrollFeed(page, 3);
-      const foundAfter = await collectPlaceLinks(page, Math.max(120, limit * 6));
+      await scrollFeed(page, completenessMode === "max" ? 4 : 3);
+      const foundAfter = await collectPlaceLinks(page, maxCollectLinks);
       for (const u of foundAfter) urlSet.add(u);
 
       if (urlSet.size === before) stableRounds += 1;
       else stableRounds = 0;
 
       // Two stable rounds usually means Maps isn't loading more results.
-      if (stableRounds >= 2) break;
+      if (stableRounds >= stableRoundLimit) break;
     }
 
     const placeUrls = [...urlSet];
+    candidateUrlCount = placeUrls.length;
     const total = Math.max(1, limit);
-    let processed = 0;
 
     for (let i = 0; i < placeUrls.length; i += 1) {
-      if (raw.length >= limit) break;
+      if (uniqueLeads.length >= limit) break;
 
       const url = placeUrls[i];
-      if (excludeUrlSet.has(url)) continue;
+      if (excludeUrlSet.has(url)) {
+        excludedCount += 1;
+        continue;
+      }
       onProgress?.({
-        progress: Math.round((raw.length / Math.max(total, 1)) * 100),
+        progress: Math.round((uniqueLeads.length / Math.max(total, 1)) * 100),
         total: limit,
-        found: raw.length,
+        found: uniqueLeads.length,
         currentName: url,
       });
 
       let row = null;
       try {
-        row = await scrapePlaceWithRetry(page, url, 1);
+        row = await scrapePlaceWithRetry(page, url, completenessMode === "max" ? 2 : 1);
       } catch {
         row = null;
       }
       if (!row) {
-        processed += 1;
+        failedCount += 1;
+        processedCount += 1;
         onProgress?.({
-          progress: Math.round((raw.length / Math.max(total, 1)) * 100),
+          progress: Math.round((uniqueLeads.length / Math.max(total, 1)) * 100),
           total: limit,
-          found: raw.length,
+          found: uniqueLeads.length,
           currentName: null,
         });
         continue;
@@ -382,6 +399,7 @@ export async function runMapsScrape({
       row.searchQuery = fullQuery;
       row.mapsUrl = row.mapsUrl || url;
       if (row.mapsUrl && excludeUrlSet.has(row.mapsUrl)) {
+        excludedCount += 1;
         continue;
       }
       row.status = classifyLead(row);
@@ -406,12 +424,22 @@ export async function runMapsScrape({
         row.socials = { ...row.socials, ...(socials || {}) };
       }
 
-      addUniqueLead(row);
-      processed += 1;
+      const insert = addUniqueLead(row);
+      if (!insert.accepted) {
+        duplicateSkippedCount += 1;
+        duplicateCandidates.push({
+          ...row,
+          isDuplicateBackfill: true,
+          duplicateReason:
+            insert.reason === "phone" ? "duplicate_phone" : "duplicate_name",
+        });
+      }
+
+      processedCount += 1;
       onProgress?.({
-        progress: Math.round((raw.length / Math.max(total, 1)) * 100),
+        progress: Math.round((uniqueLeads.length / Math.max(total, 1)) * 100),
         total: limit,
-        found: raw.length,
+        found: uniqueLeads.length,
         currentName: row.name || null,
       });
 
@@ -421,7 +449,36 @@ export async function runMapsScrape({
     await browser.close();
   }
 
-  // Raw is already unique (phone or name), but keep one final pass just in case.
-  const deduped = dedupeLeads(raw);
-  return deduped.slice(0, limit);
+  // Keep a final unique pass for the primary pool, then optionally backfill with duplicates.
+  const dedupedUnique = dedupeLeads(uniqueLeads);
+  const results = dedupedUnique.slice(0, limit);
+
+  let duplicateBackfillCount = 0;
+  if (allowDuplicateBackfill && results.length < limit) {
+    for (const row of duplicateCandidates) {
+      if (results.length >= limit) break;
+      results.push({
+        ...row,
+        isDuplicateBackfill: true,
+      });
+      duplicateBackfillCount += 1;
+    }
+  }
+
+  const returnedCount = Math.min(results.length, limit);
+  return {
+    results: results.slice(0, limit),
+    stats: {
+      requested: limit,
+      uniqueFound: dedupedUnique.length,
+      returnedCount,
+      duplicateBackfillCount,
+      duplicateSkippedCount,
+      excludedCount,
+      failedCount,
+      processedCount,
+      candidateUrlCount,
+      fulfilledExact: returnedCount >= limit,
+    },
+  };
 }

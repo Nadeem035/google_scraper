@@ -439,19 +439,49 @@
       if (!res.ok) throw new Error("Job not found");
       const j = await res.json();
 
-      setProgressMeta(j.found ?? (j.results ? j.results.length : 0), j.total ?? 0);
+      const returnedCount = j.returnedCount ?? j.found ?? (j.results ? j.results.length : 0);
+      const totalRequested = j.total ?? j.requested ?? 0;
+
+      setProgressMeta(returnedCount, totalRequested);
       setProgress(j.progress || 0, j.currentName ? `Current: ${j.currentName}` : "Working…");
       if (j.status === "queued" || j.status === "running") {
-        const found = j.found ?? 0;
-        const total = j.total ?? 0;
+        const found = returnedCount;
+        const total = totalRequested;
         setFullScreenLoader(true, `${found}/${total} collected${j.currentName ? ` · ${String(j.currentName)}` : ""}`);
       }
 
       if (j.status === "queued" || j.status === "running") {
         setStatusPill(j.status, "run");
       } else if (j.status === "completed") {
-        setStatusPill("completed", "ok");
-        setProgress(100, "Done.");
+        const uniqueFound = j.uniqueFound ?? returnedCount;
+        const duplicateBackfillCount =
+          j.duplicateBackfillCount ?? Math.max(0, returnedCount - uniqueFound);
+        const refillFromSeenCount = j.refillFromSeenCount ?? 0;
+        const target = totalRequested || returnedCount;
+        const isExact =
+          typeof j.fulfilledExact === "boolean"
+            ? j.fulfilledExact
+            : returnedCount >= target;
+        const mapsExhausted = Boolean(j.mapsExhausted);
+
+        if (isExact) {
+          setStatusPill("completed", "ok");
+        } else if (mapsExhausted) {
+          setStatusPill("maps exhausted", "ok");
+        } else {
+          setStatusPill("completed (short)", "err");
+        }
+
+        let detailMsg = `Done. Returned ${returnedCount}/${target}.`;
+        const notes = [];
+        if (duplicateBackfillCount > 0)
+          notes.push(`${uniqueFound} unique + ${duplicateBackfillCount} duplicate backfill`);
+        if (refillFromSeenCount > 0)
+          notes.push(`${refillFromSeenCount} from previously seen`);
+        if (mapsExhausted && !isExact)
+          notes.push("Google Maps has no more listings for this query");
+        if (notes.length) detailMsg = `Done. Returned ${returnedCount}/${target} (${notes.join("; ")}).`;
+        setProgress(100, detailMsg);
         state.leads = j.results || [];
         renderTable();
         recordSeenUrls(els.keyword.value.trim(), els.location.value.trim(), state.leads);
