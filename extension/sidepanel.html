@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lead Atlas Side Panel</title>
+    <link rel="stylesheet" href="./sidepanel.css" />
+  </head>
+  <body>
+    <main class="side-shell">
+      <section class="banner">
+        <p class="banner__eyebrow">Persistent monitor</p>
+        <h1>Keep the job visible while you browse.</h1>
+      </section>
+
+      <section class="card status-card">
+        <div class="card__head">
+          <h2>Live job</h2>
+          <div class="actions">
+            <button type="button" id="refreshButton">Refresh</button>
+            <button type="button" id="openOptions">Results</button>
+          </div>
+        </div>
+        <p class="status-text" id="jobStatus">idle</p>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-grid">
+          <article>
+            <span>Found</span>
+            <strong id="progressFound">0</strong>
+          </article>
+          <article>
+            <span>Target</span>
+            <strong id="progressTotal">0</strong>
+          </article>
+          <article>
+            <span>Progress</span>
+            <strong id="progressPct">0%</strong>
+          </article>
+        </div>
+        <p class="detail" id="progressDetail">Ready when you are.</p>
+        <p class="error" id="errorText" hidden></p>
+      </section>
+
+      <section class="card result-card">
+        <div class="card__head">
+          <h2>Recent leads</h2>
+          <button type="button" id="exportButton">Export CSV</button>
+        </div>
+        <ul class="result-list" id="resultList"></ul>
+        <p class="empty" id="emptyState">No completed job yet.</p>
+      </section>
+    </main>
+    <script type="module" src="./sidepanel.js"></script>
+  </body>
+  </html>

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lead Atlas Settings</title>
+    <link rel="stylesheet" href="./options.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Lead Atlas Companion</p>
+          <h1>Scrape settings, live status, and result review.</h1>
+          <p class="hero-copy">This extension works without a backend. It collects Google Business data directly from Google Maps and exports locally.</p>
+        </div>
+        <div class="hero-actions">
+          <button type="button" id="refreshStatus">Refresh</button>
+          <button type="button" id="exportButton">Export current CSV</button>
+        </div>
+      </section>
+
+      <section class="grid">
+        <section class="card">
+          <div class="card-head">
+            <h2>Scrape defaults</h2>
+            <button type="button" id="testConnection">Check Maps access</button>
+          </div>
+          <form id="settingsForm" class="form-grid">
+            <label>
+              <span>Default limit</span>
+              <input id="defaultLimit" type="number" min="1" max="500" />
+            </label>
+            <label>
+              <span>Candidate multiplier</span>
+              <input id="candidateMultiplier" type="number" min="2" max="12" />
+            </label>
+            <label class="check-row">
+              <input id="defaultExtractEmails" type="checkbox" />
+              <span>Extract emails by default</span>
+            </label>
+            <label class="check-row">
+              <input id="closeScrapeTabOnFinish" type="checkbox" />
+              <span>Close the hidden Maps scrape tab when finished</span>
+            </label>
+            <div class="actions-row">
+              <button type="submit">Save settings</button>
+              <span class="save-status" id="saveStatus"></span>
+            </div>
+          </form>
+        </section>
+
+        <section class="card status-card">
+          <div class="card-head">
+            <h2>Job status</h2>
+            <span class="status-pill" id="jobStatus">idle</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="stats-grid">
+            <article><span>Found</span><strong id="progressFound">0</strong></article>
+            <article><span>Target</span><strong id="progressTotal">0</strong></article>
+            <article><span>Progress</span><strong id="progressPct">0%</strong></article>
+          </div>
+          <p class="detail" id="progressDetail">Ready when you are.</p>
+          <p class="error" id="errorText" hidden></p>
+          <p class="meta" id="apiMetaText">No backend is used. Open Google Maps before starting a scrape.</p>
+        </section>
+      </section>
+
+      <section class="card results-card">
+        <div class="card-head card-head--stack">
+          <div>
+            <h2>Current results</h2>
+            <p class="subtle">Review the last completed job without returning to the dashboard.</p>
+          </div>
+          <input id="resultFilter" type="search" placeholder="Filter by name, phone, website, address" />
+        </div>
+        <div class="table-shell">
+          <table>
+            <thead>
+              <tr>
+                <th>Business</th>
+                <th>Phone</th>
+                <th>Website</th>
+                <th>Address</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="resultTable"></tbody>
+          </table>
+          <p class="empty" id="emptyState">No completed results yet.</p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./options.js"></script>
+  </body>
+  </html>

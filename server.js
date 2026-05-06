@@ -10,6 +10,11 @@ import {
   getDownload,
 } from "./controllers/exportController.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import {
+  corsOptionsDelegate,
+  getApiMeta,
+  requireExtensionToken,
+} from "./middleware/extensionAccess.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -19,7 +24,7 @@ const app = express();
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-app.use(cors());
+app.use(cors(corsOptionsDelegate));
 app.use(express.json({ limit: "4mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -28,7 +33,9 @@ app.get("/", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
+app.get("/api/meta", getApiMeta);
 
+app.use("/api", requireExtensionToken);
 app.post("/api/scrape", postScrape);
 app.get("/api/jobs/:jobId", getJobStatus);
 

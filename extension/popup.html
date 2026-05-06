@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lead Atlas</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <main class="popup-shell">
+      <section class="hero-card">
+        <p class="eyebrow">Lead Atlas Companion</p>
+        <h1>Start and monitor jobs without leaving Chrome.</h1>
+        <p class="hero-copy">The popup is the quick launcher. The extension scrapes Google Business data directly from Google Maps.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Start scrape</h2>
+          <button type="button" class="ghost-btn" id="openOptions">Options</button>
+        </div>
+        <form id="startForm" class="form-grid">
+          <label>
+            <span>Keyword</span>
+            <input id="query" name="query" type="text" placeholder="real estate agents" required />
+          </label>
+          <label>
+            <span>Location</span>
+            <input id="location" name="location" type="text" placeholder="Dubai" />
+          </label>
+          <label>
+            <span>Max results</span>
+            <input id="limit" name="limit" type="number" min="1" max="500" />
+          </label>
+          <label class="check-row">
+            <input id="extractEmails" name="extractEmails" type="checkbox" />
+            <span>Extract emails from websites</span>
+          </label>
+          <div class="action-row">
+            <button type="submit" class="primary-btn" id="startButton">Start scrape</button>
+            <button type="button" class="secondary-btn" id="openSidePanel">Open side panel</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel panel--status">
+        <div class="panel-head">
+          <h2>Current status</h2>
+          <button type="button" class="ghost-btn" id="refreshStatus">Refresh</button>
+        </div>
+        <div class="status-pill" id="jobStatus">idle</div>
+        <div class="progress-track" aria-hidden="true">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-meta">
+          <div>
+            <span class="meta-label">Found</span>
+            <strong id="progressFound">0</strong>
+          </div>
+          <div>
+            <span class="meta-label">Target</span>
+            <strong id="progressTotal">0</strong>
+          </div>
+          <div>
+            <span class="meta-label">Progress</span>
+            <strong id="progressPct">0%</strong>
+          </div>
+        </div>
+        <p class="detail" id="progressDetail">Ready when you are.</p>
+        <p class="error" id="errorText" hidden></p>
+      </section>
+
+      <section class="panel panel--compact">
+        <div class="panel-head">
+          <h2>Maps capture</h2>
+        </div>
+        <p class="compact-copy" id="mapsCapture">Open Google Maps and use the helper button to prefill the next run.</p>
+      </section>
+    </main>
+    <script type="module" src="./popup.js"></script>
+  </body>
+  </html>

@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Lead Atlas Companion",
+  "version": "0.1.0",
+  "description": "Extension-only Google Business lead scraper for Google Maps.",
+  "permissions": ["storage", "downloads", "sidePanel", "tabs", "activeTab"],
+  "host_permissions": ["https://www.google.com/*", "<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Lead Atlas",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.google.com/maps/*"],
+      "js": ["content/maps-content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
