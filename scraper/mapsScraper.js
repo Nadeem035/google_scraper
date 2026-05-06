@@ -290,8 +290,6 @@ export async function runMapsScrape({
   limit = 50,
   extractEmails = true,
   excludeUrls = [],
-  allowDuplicateBackfill = true,
-  completenessMode = "max",
   proxyForEmail,
   onProgress,
 }) {
@@ -345,15 +343,13 @@ export async function runMapsScrape({
     if (ph && seenPhones.has(ph)) duplicateReason = "duplicate_phone";
     else if (!ph && nm && seenNames.has(nm)) duplicateReason = "duplicate_name";
 
-    if (ph && !seenPhones.has(ph)) seenPhones.add(ph);
-    if (nm && !seenNames.has(nm)) seenNames.add(nm);
-
     if (duplicateReason) {
-      diagnostics.push(duplicateReason);
       duplicateSkippedCount += 1;
-      row.isDuplicate = true;
-      row.duplicateReason = duplicateReason;
+      return; // skip duplicates entirely
     }
+
+    if (ph) seenPhones.add(ph);
+    if (nm) seenNames.add(nm);
 
     row.diagnostics = [...new Set(diagnostics)];
     uniqueLeads.push(row);
@@ -368,10 +364,9 @@ export async function runMapsScrape({
     const urlSet = new Set();
     let stableRounds = 0;
     const maxCollectLinks = Math.max(180, limit * 10);
-    const maxAttempts = completenessMode === "max" ? Math.max(18, Math.ceil(limit / 12)) : 10;
-    const stableRoundLimit = completenessMode === "max" ? 6 : 2;
-    const targetUrlPool =
-      completenessMode === "max" ? Math.max(400, limit * 12) : Math.max(120, limit * 3);
+    const maxAttempts = 10;
+    const stableRoundLimit = 2;
+    const targetUrlPool = Math.max(120, limit * 3);
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const found = await collectPlaceLinks(page, maxCollectLinks);
@@ -381,7 +376,7 @@ export async function runMapsScrape({
       if (urlSet.size >= targetUrlPool) break;
 
       const before = urlSet.size;
-      await scrollFeed(page, completenessMode === "max" ? 4 : 3);
+      await scrollFeed(page, 3);
       const foundAfter = await collectPlaceLinks(page, maxCollectLinks);
       for (const u of foundAfter) urlSet.add(u);
 
@@ -394,20 +389,29 @@ export async function runMapsScrape({
 
     const placeUrls = [...urlSet];
     candidateUrlCount = placeUrls.length;
-    const total = Math.max(1, limit);
+    const poolSize = Math.max(1, placeUrls.length);
+
+    // Report the real pool size now that we know how many URLs Maps returned.
+    onProgress?.({
+      progress: 0,
+      total: placeUrls.length,
+      found: 0,
+      currentName: null,
+    });
 
     for (let i = 0; i < placeUrls.length; i += 1) {
+      if (uniqueLeads.length >= limit) break;
       const url = placeUrls[i];
       onProgress?.({
-        progress: Math.round((uniqueLeads.length / Math.max(total, 1)) * 100),
-        total: limit,
+        progress: Math.round(((i + 1) / poolSize) * 100),
+        total: placeUrls.length,
         found: uniqueLeads.length,
         currentName: url,
       });
 
       let row = null;
       try {
-        row = await scrapePlaceWithRetry(page, url, completenessMode === "max" ? 2 : 1);
+        row = await scrapePlaceWithRetry(page, url, 1);
       } catch {
         row = {
           name: "",
@@ -479,8 +483,8 @@ export async function runMapsScrape({
 
       processedCount += 1;
       onProgress?.({
-        progress: Math.round((uniqueLeads.length / Math.max(total, 1)) * 100),
-        total: limit,
+        progress: Math.round(((i + 1) / poolSize) * 100),
+        total: placeUrls.length,
         found: uniqueLeads.length,
         currentName: row.name || null,
       });

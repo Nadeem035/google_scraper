@@ -13,8 +13,12 @@ export function deriveProgress(job) {
   const pct = total > 0 ? Math.min(100, Math.round((found / total) * 100)) : Number(job.progress || 0);
 
   let detail = job.currentName
-    ? `${found}/${total || "?"} collected · Current: ${job.currentName}`
-    : `${found}/${total || "?"} collected`;
+    ? total > 0
+      ? `${found}/${total} collected · Current: ${job.currentName}`
+      : `Current: ${job.currentName}`
+    : total > 0
+      ? `${found}/${total} collected`
+      : "Working…";
 
   if (job.status === "completed") {
     detail = `${job.returnedCount || found} leads ready`;

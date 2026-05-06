@@ -33,7 +33,7 @@ function createJob(payload) {
     id: `job_${Date.now()}`,
     status: "queued",
     progress: 0,
-    total: payload.limit,
+    total: 0,
     found: 0,
     requested: payload.limit,
     currentName: null,
@@ -337,7 +337,7 @@ async function handleMapsPageReady(senderTabId) {
     });
     await updateActiveJob({
       status: "running",
-      total: session.payload.limit,
+      total: placeUrls.length,
       requested: session.payload.limit,
       candidateUrlCount: placeUrls.length,
       currentName: `Found ${placeUrls.length} candidates. Starting extraction`,
@@ -391,7 +391,7 @@ async function handleMapsPageReady(senderTabId) {
       returnedCount: nextResults.length,
       processedCount: session.placeIndex + 1,
       failedCount: (state.activeJob?.failedCount || 0) + (candidateLead ? 0 : 1),
-      total: session.payload.limit,
+      total: session.placeUrls.length,
       requested: session.payload.limit,
     });
 
@@ -465,7 +465,7 @@ async function handleStartScrape(message) {
     activeJob: {
       ...job,
       status: "running",
-      total: payload.limit,
+      total: 0,
       requested: payload.limit,
       currentName: "Opening Google Maps",
     },

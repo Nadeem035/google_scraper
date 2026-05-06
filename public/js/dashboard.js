@@ -335,30 +335,22 @@
     const excludedCount = Number(job?.excludedCount || 0);
     const failedCount = Number(job?.failedCount || 0);
     const missingCoreFieldsCount = Number(job?.missingCoreFieldsCount || 0);
-    const refillCount = Number(job?.refillFromSeenCount || 0);
-    const widenedCount = Number(job?.widenedScopeAddedCount || 0);
 
     if (duplicateCount > 0) {
-      items.push(`Duplicate matches detected: ${duplicateCount}. Kept in the results instead of skipping them.`);
+      items.push(`${duplicateCount} duplicate${duplicateCount > 1 ? "s" : ""} removed from results.`);
     }
     if (excludedCount > 0) {
-      items.push(`Exclude-list matches detected: ${excludedCount}. Those rows were preserved and tagged.`);
+      items.push(`${excludedCount} exclude-list match${excludedCount > 1 ? "es" : ""} removed.`);
     }
     if (failedCount > 0) {
-      items.push(`Scrape failures detected: ${failedCount}. Failure rows are preserved with diagnostics.`);
+      items.push(`${failedCount} page${failedCount > 1 ? "s" : ""} failed to scrape and were skipped.`);
     }
     if (missingCoreFieldsCount > 0) {
-      items.push(`Incomplete place pages detected: ${missingCoreFieldsCount}. Missing-field rows are preserved and tagged.`);
-    }
-    if (refillCount > 0) {
-      items.push(`Refill reuse recorded: ${refillCount}.`);
-    }
-    if (widenedCount > 0) {
-      items.push(`Widened search added: ${widenedCount}.`);
+      items.push(`${missingCoreFieldsCount} incomplete place page${missingCoreFieldsCount > 1 ? "s" : ""} detected and tagged.`);
     }
 
     if (items.length === 0) {
-      items.push("No skip conditions were triggered. All discovered rows are being kept.");
+      items.push("No issues detected. All discovered results are included.");
     }
 
     els.jobDiagnostics.hidden = false;
@@ -520,8 +512,8 @@
       }
       if (j.status === "queued" || j.status === "running") {
         const found = returnedCount;
-        const total = totalRequested;
-        setFullScreenLoader(true, `${found}/${total} collected${j.currentName ? ` · ${String(j.currentName)}` : ""}`);
+        const pool = totalRequested;
+        setFullScreenLoader(true, `${found} collected${pool ? ` · ${pool} in pool` : ""}${j.currentName ? ` · ${String(j.currentName)}` : ""}`);
       }
 
       if (j.status === "queued" || j.status === "running") {
@@ -604,7 +596,7 @@
     renderTable();
     setStatusPill("starting", "run");
     setProgress(0, "Submitting job…");
-    setProgressMeta(0, Number(els.limit.value) || 50);
+    setProgressMeta(0, 0);
     setFullScreenLoader(true, "Submitting job…");
 
     try {
